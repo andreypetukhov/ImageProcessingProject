@@ -1,6 +1,7 @@
+from torch.nn.modules.activation import Sigmoid
 from tqdm import tqdm
 
-from keras.datasets import mnist
+
 import numpy as np
 import math
 
@@ -15,23 +16,7 @@ from torchvision import transforms
 
 import matplotlib.pyplot as plt
 
-
-class Dataset(data.Dataset):
-    def __init__(self, inputs, targets):
-        self.inputs = inputs
-        self.targets = targets
-        self.transform = transforms.Compose([
-            transforms.ToTensor(),
-        ])
-
-    def __len__(self):
-        return self.inputs.shape[0]
-
-    def __getitem__(self, index):
-        x = self.inputs[index]
-        y = self.targets[index]
-        return self.transform(x).float(), y
-
+from dataset import DAD
     
 class Flatten(nn.Module):
     def forward(self, input):
@@ -39,7 +24,7 @@ class Flatten(nn.Module):
     
 class Reshape(nn.Module):
     def forward(self, input):
-        return input.view(input.size(0), 28, 28)
+        return input.view(input.size(0), 192, 192)
     
     
 # Encoder
@@ -49,21 +34,33 @@ class Encoder(nn.Module):
         super(Encoder, self).__init__()
         
         self.layer1 = nn.Sequential(
-            nn.Conv2d(1, 32, kernel_size=4, stride=2, padding=1),
+            nn.Conv2d(1, 192, kernel_size=4, stride=2, padding=1),
+            #nn.MaxPool2d(kernel_size=2, padding=1),
             nn.LeakyReLU(0.1, inplace=True),
-            nn.BatchNorm2d(32),
+            nn.BatchNorm2d(192),
+            nn.Dropout(0.1),
         )
         self.layer2 = nn.Sequential(
             nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=1),
+            #nn.MaxPool2d(kernel_size=2, padding=1),
             nn.LeakyReLU(0.1, inplace=True),
             nn.BatchNorm2d(64),
+            nn.Dropout(0.1),
         )
         self.layer3 = nn.Sequential(
             nn.Conv2d(64, 64, kernel_size=4, stride=2, padding=2),
+            
+            #nn.MaxPool2d(kernel_size=2, padding=1),
             nn.LeakyReLU(0.1, inplace=True),
             nn.BatchNorm2d(64),
+            nn.Dropout(0.1),
         )
-        self.layer4 = nn.Conv2d(64, 2, kernel_size=4, stride=1, padding=0)
+        self.layer4 = nn.Sequential(
+            nn.Conv2d(64, 2, kernel_size=4, stride=1, padding=0),
+            #nn.Dropout(0.1),
+            #nn.MaxPool2d(kernel_size=2, padding=1),
+            #nn.LeakyReLU(0.2, inplace=True),
+        )
         
     def forward(self, x):
         h = self.layer1(x)
@@ -81,22 +78,32 @@ class Decoder(nn.Module):
         self.layer1 = nn.Sequential(
             nn.ConvTranspose2d(2, 64, kernel_size=4, stride=1, padding=0),
             nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True),
+            
+            #nn.MaxPool2d(kernel_size=2, padding=1),
+            nn.LeakyReLU(0.1, inplace=True),
+            nn.Dropout(0.1),
         )
         self.layer2 = nn.Sequential(
             nn.ConvTranspose2d(64, 64, kernel_size=4, stride=2, padding=2),
             nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True),
+            
+            #nn.MaxPool2d(kernel_size=2, padding=1),
+            nn.LeakyReLU(0.1, inplace=True),
+            nn.Dropout(0.1),
         )
         self.layer3 = nn.Sequential(
             nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=0),
             nn.BatchNorm2d(32),
-            nn.ReLU(inplace=True),
+            
+            #nn.MaxPool2d(kernel_size=2, padding=1),
+            nn.LeakyReLU(0.1, inplace=True),
+            nn.Dropout(0.1),
         )
         self.layer4 = nn.Sequential(
             nn.ConvTranspose2d(32, 1, kernel_size=4, stride=2, padding=1),
             Flatten(),
-            nn.Sigmoid()
+            nn.Sigmoid(),
+
         )
         
     def forward(self, x):
@@ -175,12 +182,25 @@ def linear(t):
         return np.sqrt(2*t - 1)
     
 if __name__ == '__main__':
-    (x_train, y_train), (x_test, y_test) = mnist.load_data()
-    x_train = x_train/255
-    x_train = x_train.astype(np.float64)
+
     
-    train_dataset = Dataset(x_train, y_train)
-    trainloader = torch.utils.data.DataLoader(train_dataset, batch_size=500, shuffle=True)
+    training_normal_data = DAD(root_path='C:\SAPDevelop\DAD',
+                                   subset='train',
+                                   view='front_IR',
+                                   type='normal',
+
+                                   )
+
+    training_normal_size = int(len(training_normal_data) * 0.2)
+    training_normal_data = torch.utils.data.Subset(training_normal_data, np.arange(training_normal_size))
+
+    train_normal_loader = torch.utils.data.DataLoader(
+            training_normal_data,
+            batch_size = 50,
+            shuffle=True,
+            num_workers= 1,
+            pin_memory=True,
+        )
     
     #torch.manual_seed(10)
 
@@ -203,7 +223,7 @@ if __name__ == '__main__':
     decoder.train()
 
     for i in range(10):
-        for j, batch in enumerate(trainloader):
+        for j, batch in enumerate(train_normal_loader):
             inputs, targets = batch
             inputs = inputs.to(device)
 
@@ -223,7 +243,7 @@ if __name__ == '__main__':
     discriminator.train()
 
     for i in range(100):
-        for j, batch in enumerate(trainloader):
+        for j, batch in enumerate(train_normal_loader):
             inputs, targets = batch
             inputs = inputs.to(device)
 
