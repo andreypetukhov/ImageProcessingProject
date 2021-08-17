@@ -34,21 +34,21 @@ class Encoder(nn.Module):
         super(Encoder, self).__init__()
         
         self.layer1 = nn.Sequential(
-            nn.Conv2d(1, 192, kernel_size=4, stride=2, padding=1),
+            nn.Conv2d(1, 32, kernel_size=9, stride=3, padding=1),
             #nn.MaxPool2d(kernel_size=2, padding=1),
             nn.LeakyReLU(0.1, inplace=True),
-            nn.BatchNorm2d(192),
+            nn.BatchNorm2d(32),
             nn.Dropout(0.1),
         )
         self.layer2 = nn.Sequential(
-            nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=1),
+            nn.Conv2d(32, 64, kernel_size=9, stride=3, padding=1),
             #nn.MaxPool2d(kernel_size=2, padding=1),
             nn.LeakyReLU(0.1, inplace=True),
             nn.BatchNorm2d(64),
             nn.Dropout(0.1),
         )
         self.layer3 = nn.Sequential(
-            nn.Conv2d(64, 64, kernel_size=4, stride=2, padding=2),
+            nn.Conv2d(64, 64, kernel_size=9, stride=2, padding=1),
             
             #nn.MaxPool2d(kernel_size=2, padding=1),
             nn.LeakyReLU(0.1, inplace=True),
@@ -56,10 +56,8 @@ class Encoder(nn.Module):
             nn.Dropout(0.1),
         )
         self.layer4 = nn.Sequential(
-            nn.Conv2d(64, 2, kernel_size=4, stride=1, padding=0),
-            #nn.Dropout(0.1),
-            #nn.MaxPool2d(kernel_size=2, padding=1),
-            #nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(64, 2, kernel_size=9, stride=1, padding=1),
+           
         )
         
     def forward(self, x):
@@ -76,31 +74,31 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
 
         self.layer1 = nn.Sequential(
-            nn.ConvTranspose2d(2, 64, kernel_size=4, stride=1, padding=0),
+            nn.ConvTranspose2d(2, 64, kernel_size=9, stride=1, padding=0),
             nn.BatchNorm2d(64),
             
-            #nn.MaxPool2d(kernel_size=2, padding=1),
+            #nn.MaxUnpool2d(kernel_size=2, padding=1),
             nn.LeakyReLU(0.1, inplace=True),
             nn.Dropout(0.1),
         )
         self.layer2 = nn.Sequential(
-            nn.ConvTranspose2d(64, 64, kernel_size=4, stride=2, padding=2),
+            nn.ConvTranspose2d(64, 64, kernel_size=9, stride=3, padding=3),
             nn.BatchNorm2d(64),
             
-            #nn.MaxPool2d(kernel_size=2, padding=1),
+            #nn.MaxUnpool2d(kernel_size=2, padding=1),
             nn.LeakyReLU(0.1, inplace=True),
             nn.Dropout(0.1),
         )
         self.layer3 = nn.Sequential(
-            nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=0),
+            nn.ConvTranspose2d(64, 32, kernel_size=9, stride=3, padding=2),
             nn.BatchNorm2d(32),
             
-            #nn.MaxPool2d(kernel_size=2, padding=1),
+            #nn.MaxUnpool2d(kernel_size=2, padding=1),
             nn.LeakyReLU(0.1, inplace=True),
             nn.Dropout(0.1),
         )
         self.layer4 = nn.Sequential(
-            nn.ConvTranspose2d(32, 1, kernel_size=4, stride=2, padding=1),
+            nn.ConvTranspose2d(32, 1, kernel_size=9, stride=3, padding=2),
             Flatten(),
             nn.Sigmoid(),
 
@@ -232,7 +230,7 @@ if __name__ == '__main__':
             decoder.zero_grad()
             z_sample = encoder(inputs)
             X_sample = decoder(z_sample)
-            recon_loss = F.binary_cross_entropy(X_sample, inputs.view(-1, 784))
+            recon_loss = F.binary_cross_entropy(X_sample, inputs.view(-1, 36864))
             recon_loss.backward()
             optim_enc.step()
             optim_dec.step()
