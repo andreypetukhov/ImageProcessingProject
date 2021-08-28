@@ -1,18 +1,23 @@
 import torch
 import torch.utils.data as data
-import torchvision.transforms as transforms
 from PIL import Image, ImageFilter
+import torchvision.transforms as transforms
 import os
 import csv
 
 def pil_loader(path):
+    """
+    open path as file to avoid ResourceWarning (https://github.com/python-pillow/Pillow/issues/835)
+    :param path: image path
+    :return: image data
+    """
     with open(path, 'rb') as f:
         with Image.open(f) as img:
             return img.convert('L')
 
 
 def get_default_image_loader():
-    return pil_loader
+            return pil_loader
 
 def get_video(video_path, frame_indices):
     """
@@ -72,85 +77,18 @@ def listdir(path):
     for f in os.listdir(path):
             yield f
 
-
 def make_dataset(root_path, subset, view, sample_duration, type=None):
     """
-    :param root_path: root path of the dataset"
-    :param subset: train / validation
+    Only be used at test time
+    :param root_path: root path, e.g. "/usr/home/sut/datasets/DAD/DAD/"
+    :param subset: validation
     :param view: front_depth / front_IR / top_depth / top_IR
     :param sample_duration: how many frames should one sample contain
-    :param type: during training process: type = normal / anormal ; during validation or test process: type = None
+    :param type: during training process: type = None
     :return: list of data samples, each sample is in form {'video':video_path, 'label': 0/1, 'subset': 'train'/'validation', 'view': 'front_depth' / 'front_IR' / 'top_depth' / 'top_IR', 'action': 'normal' / other anormal actions}
     """
     dataset = []
-    if subset == 'train' and type == 'normal':
-        # load normal training data
-        train_folder_list = list(filter(lambda string: string.find('Tester') != -1, list(listdir(root_path))))
-
-        for train_folder in train_folder_list:
-            normal_video_list = list(filter(lambda string: string.split('_')[0] == 'normal', list(listdir(os.path.join(root_path, train_folder)))))
-
-            for normal_video in normal_video_list:
-                video_path = os.path.join(root_path, train_folder, normal_video, view)
-                if not os.path.exists(video_path):
-                    print(f"Video path doesn't exit: {video_path}")
-                    continue
-
-                n_frames = len(os.listdir(video_path))
-                if n_frames <= 0:
-                    print(f"Path {video_path} does't contain any data")
-                    continue
-
-                sample = {
-                    'video': video_path,
-                    'label': 1,
-                    'subset': 'train',
-                    'view': view,
-                    'action': 'normal'
-                }
-                for i in range(0, n_frames, sample_duration):
-                    sample_ = sample.copy()
-                    sample_['frame_indices'] = list(range(i, min(n_frames, i + sample_duration)))
-                    if len(sample_['frame_indices']) < sample_duration:
-                        for j in range(sample_duration-len(sample_['frame_indices'])):
-                            sample_['frame_indices'].append(sample_['frame_indices'][-1])
-                    dataset.append(sample_)
-
-
-    elif subset == 'train' and type == 'anormal':
-        #load anormal training data
-        train_folder_list = list(filter(lambda string: string.find('Tester') != -1, list(listdir(root_path))))
-
-        for train_folder in train_folder_list:
-            anormal_video_list = list(filter(lambda string: string.split('_')[0] != 'normal', list(listdir(os.path.join(root_path, train_folder)))))
-
-            for anormal_video in anormal_video_list:
-                video_path = os.path.join(root_path, train_folder, anormal_video, view)
-                if not os.path.exists(video_path):
-                    print(f"Video path doesn't exit: {video_path}")
-                    continue
-                n_frames = len(os.listdir(video_path))
-                if n_frames <= 0:
-                    print(f"Path {video_path} does't contain any data")
-                    continue
-                sample = {
-                    'video': video_path,
-                    'label': 0,
-                    'subset': 'train',
-                    'view': view,
-                    'action': anormal_video,
-                }
-
-                for i in range(0, n_frames, sample_duration):
-                    sample_ = sample.copy()
-                    sample_['frame_indices'] = list(range(i, min(n_frames, i + sample_duration)))
-                    if len(sample_['frame_indices']) < sample_duration:
-                        for j in range(sample_duration-len(sample_['frame_indices'])):
-                            sample_['frame_indices'].append(sample_['frame_indices'][-1])
-
-                    dataset.append(sample_)
-
-    elif subset == 'validation' and type == None:
+    if subset == 'validation' and type == None:
         #load valiation data as well as thier labels
         csv_path = root_path + 'LABEL.csv'
         with open(csv_path) as csv_file:
@@ -171,13 +109,13 @@ def make_dataset(root_path, subset, view, sample_duration, type=None):
                 clips = get_clips(video_path, video_begin, video_end, label, view, sample_duration)
                 dataset = dataset + clips
     else:
-        print('!!!DATA LOADING FAILURE!!!CANT FIND CORRESPONDING DATA!!!PLEASE CHECK INPUT!!!')
+        print('!!!DATA LOADING FAILURE!!!THIS DATASET IS ONLY USED IN TESTING MODE!!!PLEASE CHECK INPUT!!!')
     return dataset
 
 
-class DAD(data.Dataset):
+class DAD_Test(data.Dataset):
     """
-    generate normal training/ anormal training/ validation dataset according to requirement
+    This dataset is only used at test time to genrate consecutive video samples.
     """
     def __init__(self,
                  root_path,
@@ -185,7 +123,7 @@ class DAD(data.Dataset):
                  view,
                  sample_duration=1,
                  type=None,
-                 get_loader=get_video,
+                 get_loader=get_video
                  ):
         self.data = make_dataset(root_path, subset, view, sample_duration, type)
         self.sample_duration = sample_duration
@@ -193,33 +131,19 @@ class DAD(data.Dataset):
         self.loader = get_loader
 
     def __getitem__(self, index):
-        if self.subset == 'train':
+        if self.subset == 'validation':
             video_path = self.data[index]['video']
+            ground_truth = self.data[index]['label']
             frame_indices = self.data[index]['frame_indices']
-            #print(frame_indices)
-           
             clip = self.loader(video_path, frame_indices)
             trans1 = transforms.ToTensor()
             clip = [trans1(img).float() for img in clip]
             clip = torch.stack(clip, 0).permute(1, 0, 2, 3)
-            clip = torch.squeeze(clip,1)
-                          #data with shape (channels, timesteps, height, width)
-            return clip, index
-        elif self.subset == 'validation':
-            video_path = self.data[index]['video']
-            ground_truth = self.data[index]['label']
-            frame_indices = self.data[index]['frame_indices']
-
-            clip = self.loader(video_path, frame_indices)
-            trans1 = transforms.ToTensor()
-            clip = [trans1(img) for img in clip]
-            clip = torch.stack(clip, 0).permute(1, 0, 2, 3)
-            clip = torch.squeeze(clip,1)
-
+            clip = torch.squeeze(clip,2)
             return clip, ground_truth
-
         else:
-            print('!!!DATA LOADING FAILURE!!!CANT FIND CORRESPONDING DATA!!!PLEASE CHECK INPUT!!!')
+            print('!!!DATA LOADING FAILURE!!!THIS DATASET IS ONLY USED IN TESTING MODE!!!PLEASE CHECK INPUT!!!')
     def __len__(self):
         return len(self.data)
+
 
